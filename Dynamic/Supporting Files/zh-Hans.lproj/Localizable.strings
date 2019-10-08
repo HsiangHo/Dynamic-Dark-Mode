@@ -4,8 +4,14 @@
 /* Generic error happened */
 "AppleScript.authorization.failed" = "出错了 QAQ";
 
+/* Go to System Preferences */
+"AppleScript.authorization.goToSystemPreferences" = "好";
+
 /* No comment provided by engineer. */
 "AppleScript.authorization.instruction" = "我们将带您到“系统偏好设置”。";
+
+/* User thinks they have given us permission to control System Events */
+"AppleScript.authorization.nope" = "已经授权";
 
 /* Something went wrong. But it's okay */
 "AppleScript.execute.error" = "未能切换外观模式";
@@ -42,6 +48,9 @@
 
 /* Indicates either enable or disable opens at login failed. */
 "Preferences.opensAtLogin.failed" = "未能更新“开机自启动”设置";
+
+/* Notification text for bug report */
+"ScreenBrightnessObserver.startObserving.failed" = "无法根据屏幕亮度自动切换深色模式。";
 
 /* For touch bar button title */
 "SettingsViewController.autoAdjustThreshold" = "自动切换阀值";

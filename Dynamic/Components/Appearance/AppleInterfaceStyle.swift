@@ -16,16 +16,13 @@ public enum AppleInterfaceStyle: String {
 // MARK: - Toggle Dark Mode
 
 extension AppleInterfaceStyle {
+    
     static func toggle() {
         AppleScript.toggleDarkMode.execute()
     }
     
-    func enable(requestingPermission: Bool = true) {
-        if requestingPermission {
-            AppleScript.checkPermission {
-                self.enable(requestingPermission: false)
-            }
-        }
+    func enable() {
+        guard AppleInterfaceStyle.current != self else { return }
         switch self {
         case .aqua:
             AppleScript.disableDarkMode.execute()
@@ -33,4 +30,16 @@ extension AppleInterfaceStyle {
             AppleScript.enableDarkMode.execute()
         }
     }
+    
+    static func updateWallpaper() {
+        guard let url = isDark
+            ? preferences.darkDesktopURL
+            : preferences.lightDesktopURL
+            else { return }
+        let workspace = NSWorkspace.shared
+        for screen in NSScreen.screens {
+            try? workspace.setDesktopImageURL(url, for: screen)
+        }
+    }
+    
 }

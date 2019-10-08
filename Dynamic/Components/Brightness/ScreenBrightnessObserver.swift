@@ -7,17 +7,20 @@
 //
 
 import Cocoa
+import Schedule
 
 final class ScreenBrightnessObserver: NSObject {
 
-    var notificationPort: IONotificationPortRef?
-    let queue = DispatchQueue(label: "ddm.queue")
-    lazy var currentMode: AppleInterfaceStyle = suggestedMode
-    var callback: IOServiceInterestCallback = { (ctx, service, messageType, messageArgument) -> Void in
-        if let ctx = ctx {
-            let observer = Unmanaged<ScreenBrightnessObserver>.fromOpaque(ctx).takeUnretainedValue()
-            observer.updateForBrightnessChange()
-        }
+    private var notificationPort: IONotificationPortRef?
+    private let queue = DispatchQueue(label: "ddm.queue.brightness")
+    private lazy var lastBrightness = NSScreen.brightness
+    private var callback: IOServiceInterestCallback = { (ctx, service, messageType, messageArgument) in
+        guard let ctx = ctx else { return }
+        let observer = Unmanaged<ScreenBrightnessObserver>.fromOpaque(ctx).takeUnretainedValue()
+        let newBrightness = NSScreen.brightness
+        guard observer.lastBrightness != newBrightness else { return }
+        observer.lastBrightness = newBrightness
+        observer.setNeedsUpdate()
     }
 
     static let shared = ScreenBrightnessObserver()
@@ -26,21 +29,26 @@ final class ScreenBrightnessObserver: NSObject {
 
     public func startObserving(withInitialUpdate: Bool = true) {
         stopObserving()
-        currentMode = suggestedMode
+        defer { if withInitialUpdate { setNeedsUpdate() } }
         let service = IOServiceGetMatchingService(kIOMasterPortDefault, IOServiceMatching("AppleBacklightDisplay"))
-        if service == IO_OBJECT_NULL {
-            return
+        guard service != IO_OBJECT_NULL else {
+            #if DEBUG
+            fatalError("AppleBacklightDisplay is IO_OBJECT_NULL")
+            #else
+            return remindReportingBug(NSLocalizedString(
+                "ScreenBrightnessObserver.startObserving.failed",
+                value: "Cannot observe screen brightness change.",
+                comment: "Notification text for bug report"
+            ))
+            #endif
         }
-
+        defer { IOObjectRelease(service) }
         notificationPort = IONotificationPortCreate(kIOMasterPortDefault)
         IONotificationPortSetDispatchQueue(notificationPort, queue)
         var n = io_object_t()
         let ctx = UnsafeMutableRawPointer(Unmanaged.passRetained(self).toOpaque())
         IOServiceAddInterestNotification(notificationPort, service, kIOGeneralInterest, callback, ctx, &n)
-        IOObjectRelease(service)
-
-        guard withInitialUpdate else { return }
-        updateForBrightnessChange()
+        lastBrightness = NSScreen.brightness
     }
 
     public var suggestedMode: AppleInterfaceStyle {
@@ -48,19 +56,21 @@ final class ScreenBrightnessObserver: NSObject {
         let threshold = preferences.brightnessThreshold
         return brightness < threshold ? .darkAqua : .aqua
     }
-
-    @objc private func updateForBrightnessChange() {
-        let value = suggestedMode
-        if currentMode != value {
-            currentMode = value
-            currentMode.enable()
-        }
+    
+    private var task: Task?
+    private func setNeedsUpdate() {
+        task = Plan.after(0.5.seconds).do(queue: .main, action: _updateForBrightnessChange)
+    }
+    
+    private func _updateForBrightnessChange() {
+        let newValue = suggestedMode
+        guard AppleInterfaceStyle.current != newValue else { return }
+        newValue.enable()
     }
 
     public func stopObserving() {
-        if nil != notificationPort {
-            IONotificationPortDestroy(notificationPort)
-            notificationPort = nil
-        }
+        guard notificationPort != nil else { return }
+        IONotificationPortDestroy(notificationPort)
+        notificationPort = nil
     }
 }

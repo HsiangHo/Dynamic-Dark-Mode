@@ -1,5 +1,5 @@
 //
-//  TouchBarForSettingsVC.swift
+//  SettingsViewController + TouchBar.swift
 //  Dynamic Dark Mode
 //
 //  Created by Captain雪ノ下八幡 on 2018/6/27.
@@ -27,15 +27,24 @@ extension SettingsViewController: NSTouchBarDelegate {
             popoverItem.popoverTouchBar = sliderTouchBar
             popoverItem.pressAndHoldTouchBar = sliderTouchBar
             popoverItem.collapsedRepresentationLabel = LocalizedString.SettingsViewController.autoAdjustThreshold
-            popoverItem.view?.bind(.enabled, to: defaultsController, withKeyPath: "values.adjustForBrightness", options: nil)
+            popoverItem.view?.bind(.enabled, to: defaultsController,
+                                   withKeyPath: preferences.bindingKeyPath(\.adjustForBrightness), options: nil)
+            if #available(OSX 10.15, *) {
+                popoverItem.view?.bindEnabledToNotAppleInterfaceStyleSwitchesAutomatically(withName: .enabled2)
+            }
             return popoverItem
         case .thresholdSubSliderItem:
             let sliderItem = NSSliderTouchBarItem(identifier: identifier)
             sliderItem.label = LocalizedString.SettingsViewController.autoAdjustThreshold
             sliderItem.slider.minValue = 0
             sliderItem.slider.maxValue = 100
-            sliderItem.slider.bind(.value, to: defaultsController, withKeyPath: "values.brightnessThreshold", options: nil)
-            sliderItem.slider.bind(.enabled, to: defaultsController, withKeyPath: "values.adjustForBrightness", options: nil)
+            sliderItem.slider.bind(.value, to: defaultsController,
+                                   withKeyPath: preferences.bindingKeyPath(\.brightnessThreshold), options: nil)
+            sliderItem.slider.bind(.enabled, to: defaultsController,
+                                   withKeyPath: preferences.bindingKeyPath(\.adjustForBrightness), options: nil)
+            if #available(OSX 10.15, *) {
+                sliderItem.slider.bindEnabledToNotAppleInterfaceStyleSwitchesAutomatically(withName: .enabled2)
+            }
             return sliderItem
         case .scheduleTypePopoverItem:
             let popoverItem = NSPopoverTouchBarItem(identifier: identifier)
@@ -44,7 +53,8 @@ extension SettingsViewController: NSTouchBarDelegate {
             scrubberTouchBar.delegate = self
             popoverItem.collapsedRepresentationLabel = LocalizedString.SettingsViewController.scheduleMode
             popoverItem.popoverTouchBar = scrubberTouchBar
-            popoverItem.view?.bind(.enabled, to: defaultsController, withKeyPath: "values.scheduled", options: nil)
+            popoverItem.view?.bind(.enabled, to: defaultsController,
+                                   withKeyPath: preferences.bindingKeyPath(\.scheduled), options: nil)
             return popoverItem
         case .scheduleTypeSubScrubberItem:
             let scrubber = NSScrubber()
@@ -55,9 +65,12 @@ extension SettingsViewController: NSTouchBarDelegate {
             scrubber.mode = .fixed
             scrubber.floatsSelectionViews = true
             scrubber.selectionOverlayStyle = .outlineOverlay
-            scrubber.scrubberLayout = NSScrubberProportionalLayout(numberOfVisibleItems: 5)
+            scrubber.scrubberLayout = NSScrubberProportionalLayout(
+                numberOfVisibleItems: numberOfItems(for: scrubber)
+            )
             scrubber.backgroundColor = .scrubberTexturedBackground
-            scrubber.bind(.selectedIndex, to: defaultsController, withKeyPath: "values.scheduleType", options: nil)
+            scrubber.bind(.selectedIndex, to: defaultsController,
+                          withKeyPath: preferences.bindingKeyPath(\.scheduleType), options: nil)
             let scrubberItem = NSCustomTouchBarItem(identifier: identifier)
             scrubberItem.view = scrubber
             return scrubberItem
@@ -69,7 +82,7 @@ extension SettingsViewController: NSTouchBarDelegate {
 
 extension SettingsViewController: NSScrubberDataSource, NSScrubberDelegate {
     func numberOfItems(for scrubber: NSScrubber) -> Int {
-        return 5
+        return Zenith.hasZenithTypeSystem ? 6 : 5
     }
     
     func scrubber(_ scrubber: NSScrubber, viewForItemAt index: Int) -> NSScrubberItemView {
@@ -85,6 +98,9 @@ extension SettingsViewController: NSScrubberDataSource, NSScrubberDelegate {
             view.title = LocalizedString.SunsetSunrise.astronomical
         case 4:
             view.title = LocalizedString.SunsetSunrise.customRange
+        case 5:
+            guard Zenith.hasZenithTypeSystem else { fallthrough }
+            view.title = LocalizedString.SunsetSunrise.system
         default:
             fatalError("Unexpected index number")
         }
@@ -92,7 +108,7 @@ extension SettingsViewController: NSScrubberDataSource, NSScrubberDelegate {
     }
     
     func scrubber(_ scrubber: NSScrubber, didSelectItemAt selectedIndex: Int) {
-        preferences.scheduleType = selectedIndex
+        preferences.scheduleZenithType = Zenith(rawValue: selectedIndex) ?? .official
     }
 }
 

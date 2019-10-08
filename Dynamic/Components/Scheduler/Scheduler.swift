@@ -14,17 +14,14 @@ import Schedule
 public final class Scheduler: NSObject {
     public static let shared = Scheduler()
     
-    private var task: Task? {
-        didSet {
-            oldValue?.cancel()
-        }
-    }
+    private var task: Task?
     
     public func cancel() {
         task = nil
     }
     
     @objc public func schedule(startBrightnessObserverOnFailure: Bool = false) {
+        if #available(OSX 10.15, *), preferences.AppleInterfaceStyleSwitchesAutomatically { return }
         func processLocation(_ result: Location) {
             switch result {
             case .current(let location):
@@ -44,17 +41,14 @@ public final class Scheduler: NSObject {
         UserNotification.removeAll()
         let decision = mode(atLocation: location?.coordinate)
         decision.style.enable()
-        if preferences.adjustForBrightness, // and don't observe brightness at night if disabled:
-            decision.style == .aqua || !preferences.disableAdjustForBrightnessWhenScheduledDarkModeOn {
-            ScreenBrightnessObserver.shared.startObserving(withInitialUpdate: false)
-        } // no initial update because we are using the schedule
+        updateScreenBrightnessObserver(forAppearance: decision.style)
         guard let date = decision.date else { return }
         task = Plan.at(date).do { [weak self] in self?.schedule() }
     }
     
     @discardableResult
     private func scheduleAtCachedLocation(_ location: CLLocation) -> Bool {
-        guard preferences.scheduleZenithType != .custom else {
+        guard preferences.scheduleZenithType.hasSunriseSunsetTime else {
             scheduleAtLocation(nil)
             return false
         }
@@ -69,9 +63,29 @@ public final class Scheduler: NSObject {
         return true
     }
     
+    private func updateScreenBrightnessObserver(forAppearance style: AppleInterfaceStyle) {
+        if preferences.adjustForBrightness,
+            style == .aqua || !preferences.disableAdjustForBrightnessWhenScheduledDarkModeOn {
+            // no initial update because we are using the schedule
+            ScreenBrightnessObserver.shared.startObserving(withInitialUpdate: false)
+        } else  {
+            // don't observe brightness at night if disabled
+            ScreenBrightnessObserver.shared.stopObserving()
+        }
+    }
+    
     // Mark: - Mode
     
-    public func getCurrentMode(then process: @escaping Handler<Result<Mode, Error>>) {
+    public func updateSchedule(then process: @escaping Handler<Result<Void, Error>>) {
+        if #available(OSX 10.15, *), preferences.AppleInterfaceStyleSwitchesAutomatically {
+            return process(.failure(AnError(errorDescription: "AppleInterfaceStyleSwitchesAutomatically")))
+        }
+        getCurrentMode { [weak self] in process($0.map {
+            self?.updateScreenBrightnessObserver(forAppearance: $0.style)
+        }) }
+    }
+    
+    private func getCurrentMode(then process: @escaping Handler<Result<Mode, Error>>) {
         LocationManager.serial.fetch { [unowned self] in
             switch $0 {
             case .current(let location), .cached(let location):
@@ -84,39 +98,50 @@ public final class Scheduler: NSObject {
     
     public typealias Mode = (style: AppleInterfaceStyle, date: Date?)
     
-    public func mode(atLocation coordinate: CLLocationCoordinate2D?) -> Mode {
-        let now = Date()
+    public func mode(atLocation coordinate: CLLocationCoordinate2D?, now: Date? = nil) -> Mode {
+        let now = now ?? Date()
         let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: now)!
         if let coordinate = coordinate
             , CLLocationCoordinate2DIsValid(coordinate)
-            , preferences.scheduleZenithType != .custom {
-            let scheduledDate: Date
-            let solar = Solar(for: now, coordinate: coordinate)!
-            let dates = solar.sunriseSunsetTime
-            if now < dates.sunrise {
-                scheduledDate = dates.sunrise
-                let yesterday = Calendar.current.date(byAdding: .day, value: -1, to: now)!
-                let pastSolar = Solar(for: yesterday, coordinate: coordinate)!
-                preferences.scheduleStart = pastSolar.sunriseSunsetTime.sunset
+            , preferences.scheduleZenithType.hasSunriseSunsetTime {
+            return dynamicCurrentMode(fromToday: now, andTomorrow: tomorrow, at: coordinate)
+        } else {
+            return staticCurrentMode(fromToday: now, andTomorrow: tomorrow)
+        }
+    }
+    
+    private func dynamicCurrentMode(fromToday now: Date, andTomorrow tomorrow: Date,
+                                    at coordinate: CLLocationCoordinate2D) -> Mode {
+        let currentTimeZone = TimeZone.current
+        let scheduledDate: Date
+        let solar = Solar(for: now, coordinate: coordinate, timezone: currentTimeZone)!
+        let dates = solar.sunriseSunsetTime
+        if now < dates.sunrise {
+            scheduledDate = dates.sunrise
+            let yesterday = Calendar.current.date(byAdding: .day, value: -1, to: now)!
+            let pastSolar = Solar(for: yesterday, coordinate: coordinate, timezone: currentTimeZone)!
+            preferences.scheduleStart = pastSolar.sunriseSunsetTime.sunset
+            preferences.scheduleEnd = scheduledDate
+            return (.darkAqua, scheduledDate)
+        } else {
+            let futureSolar = Solar(for: tomorrow, coordinate: coordinate, timezone: currentTimeZone)!
+            let futureDates = futureSolar.sunriseSunsetTime
+            if now < dates.sunset {
+                scheduledDate = dates.sunset
+                preferences.scheduleStart = scheduledDate
+                preferences.scheduleEnd = futureDates.sunrise
+                return (.aqua, scheduledDate)
+            } else { // after sunset
+                preferences.scheduleStart = dates.sunset
+                scheduledDate = futureDates.sunrise
                 preferences.scheduleEnd = scheduledDate
                 return (.darkAqua, scheduledDate)
-            } else {
-                let futureSolar = Solar(for: tomorrow, coordinate: coordinate)!
-                let futureDates = futureSolar.sunriseSunsetTime
-                if now < dates.sunset {
-                    scheduledDate = dates.sunset
-                    preferences.scheduleStart = scheduledDate
-                    preferences.scheduleEnd = futureDates.sunrise
-                    return (.aqua, scheduledDate)
-                } else { // after sunset
-                    preferences.scheduleStart = dates.sunset
-                    scheduledDate = futureDates.sunrise
-                    preferences.scheduleEnd = scheduledDate
-                    return (.darkAqua, scheduledDate)
-                }
             }
         }
-        if preferences.scheduleZenithType != .custom {
+    }
+    
+    private func staticCurrentMode(fromToday now: Date, andTomorrow tomorrow: Date) -> Mode {
+        if preferences.scheduleZenithType.hasSunriseSunsetTime {
             preferences.scheduleZenithType = .custom
         }
         let current = Calendar.current.dateComponents([.hour, .minute], from: now)
@@ -173,11 +198,8 @@ public final class Scheduler: NSObject {
         NotificationCenter.default.removeObserver(self)
     }
     
-    private var fakeClockChange: Task? {
-        didSet {
-            oldValue?.cancel()
-        }
-    }
+    private var fakeClockChange: Task?
+    
     /// Usually it takes 5~15 seconds to happen, so 30 seconds
     /// is a relatively safe but reasonable long waiting time.
     private let waitForfakeClockChange = 30.seconds

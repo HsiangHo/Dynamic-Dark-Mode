@@ -7,6 +7,7 @@
 //
 
 import Network
+import Schedule
 
 public final class Connectivity {
     private var monitor: NWPathMonitor!
@@ -17,14 +18,22 @@ public final class Connectivity {
     public static let `default` = Connectivity(label: "Connectivity")
     
     private var isObserving = false
+    private var isInitialUpdate = true
     public func startObserving(onSuccess: @escaping () -> Void) {
         stopObserving()
         monitor = NWPathMonitor()
-        monitor.pathUpdateHandler = { path in
+        monitor.pathUpdateHandler = { [weak self] path in
+            guard let self = self else { return }
+            guard !self.isInitialUpdate else {
+                self.isInitialUpdate = false
+                return
+            }
             switch path.status {
-            case .satisfied, .requiresConnection:
+            case .satisfied:
+                if path.isExpensive { return }
+                if #available(OSX 10.15, *), path.isConstrained { return }
                 onSuccess()
-            case .unsatisfied:
+            case .requiresConnection, .unsatisfied:
                 break
             @unknown default:
                 remindReportingBug("\(path.status)")
@@ -36,15 +45,16 @@ public final class Connectivity {
     
     public func stopObserving() {
         guard isObserving else { return }
+        isInitialUpdate = true
         monitor.cancel()
         isObserving = false
+        task = nil
     }
-}
-
-extension Connectivity {
+    
+    private var task: Task?
     public func scheduleWhenReconnected() {
-        startObserving {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
+        startObserving { [weak self] in
+            self?.task = Plan.after(5.seconds).do(queue: .main) {
                 Scheduler.shared.schedule()
             }
         }

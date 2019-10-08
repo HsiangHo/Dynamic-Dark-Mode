@@ -3,12 +3,62 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
-## [1.3.0] - 2019-05-17
-### Added
-- Let's move to /Applications
+## [1.5.2] - 2019-09-23
+### Changed
+- Switches dark mode with SkyLight when missing AppleScript permission
+- Behavior of buttons to adapt to system schedule
+- Updated French translation
 
 ### Fixed
-- Crash on launch when not installed to /Applications folder by asking them to move (#16, #49)
+- Wrong sunset/sunrise date when UTC time is in next day
+- Version number now works with Sparkle
+
+## [1.5.1] - 2019-09-18
+### Added
+- Import Spanish translations from Crowdin
+- Option to skip setup and AppleScript permission check (#75)
+
+### Changed
+- Only reschedules when connection is not expensive and not in low data mode
+
+### Fixed
+- Update for screen brightness should be more reliable 
+- Now detects system auto appearance on launch to set appropriate schedule type
+- Reopening app will open the appropriate screen
+
+## [1.5.0] - 2019-09-14
+### Added
+- Supports macOS Catalina Apperance Auto (#74)
+
+### Changed
+- Update for brightness and connectivity changes are delayed (#73, #57)
+- Settings panel will adjust to its smallest size possible.
+
+### Fixed
+- Dynamic wallpaper not updating when the "scheduled" option is not enabled
+
+## [1.4.2] - 2019-09-10
+### Changed
+- Updated Chinese, Japanese, and Russian translations
+
+## [1.4.1] - 2019-09-10
+### Added
+- Complete Sparkle integration (#6)
+
+## [1.4.0] - 2019-09-08
+### Added
+- Dynamic wallpaper based on current appearance (#72)
+
+### Fixed
+- Automatic appearance switch based on screen brightness works on macOS Mojave 10.14.4 and above (#65, #71)
+- Switching apperance won't steal focus from some application and not return it (#70, #62, #18)
+
+## [1.3.0] - 2019-05-17
+### Added
+- Let's move to `/Applications`
+
+### Fixed
+- Crash on launch when not installed to `/Applications` folder by asking them to move (#16, #49)
 - Switching theme no longer steal focus from focused application (#62)
 
 ### Removed
@@ -17,7 +67,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [1.2.0] - 2019-05-07
 ### Added
 - Disable adjust for brightness when scheduled dark mode on
-- Quick dark mode toggle in touch bar through DFRFoundation
+- Quick dark mode toggle in touch bar through `DFRFoundation`
 - Update schedule when network status changes
 
 ## [1.1.5] - 2019-05-02
@@ -28,7 +78,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Changed
 - Updated the program and its dependencies to Swift 5 
 - Updated Chinese, Esperanto, and Russian translations
-- Using fatalError or debugPrint instead of os.log
+- Using `fatalError` or `debugPrint` instead of `os.log`
 
 ### Fixed
 - "nil: estimatedNextExecution" should no longer appear (#59)

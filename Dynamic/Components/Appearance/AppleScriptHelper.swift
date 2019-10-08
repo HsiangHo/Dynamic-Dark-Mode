@@ -16,74 +16,65 @@ public enum AppleScript: String, CaseIterable {
     case disableDarkMode = "false"
 }
 
-// MARK: - Handy Properties
-
-extension AppleScript {
-    /// Switches dark mode and [returns focus back to the original app](
-    ///   https://discussions.apple.com/thread/6820749?answerId=27630325022#27630325022
-    /// )
-    ///
-    /// - Note: It doesn't work if an [LSUIElement is focused](
-    ///   http://hints.macworld.com/article.php?story=20060110152311698
-    /// )
-    private var source: String {
-        return """
-        tell application "System Events"
-            set frontmostApplicationName to name of 1st process whose frontmost is true
-            tell appearance preferences to set dark mode to \(rawValue)
-        end tell
-        
-        tell application frontmostApplicationName
-            activate
-        end tell
-        """
-    }
-}
-
 // MARK: - Execution
 
 extension AppleScript {
     public func execute() {
-        AppleScript.checkPermission {
-            var errorInfo: NSDictionary? = nil
-            NSAppleScript(source: self.source)!
-                .executeAndReturnError(&errorInfo)
-            remindReportingBug(info: errorInfo, title: NSLocalizedString(
-                "AppleScript.execute.error",
-                value: "Failed to Toggle Dark Mode",
-                comment: "Something went wrong. But it's okay"
-            ))
+        let frontmostApplication = NSWorkspace.shared.frontmostApplication
+        AppleScript.requestPermission { authorized in
+            defer { frontmostApplication?.activate(options: [.activateIgnoringOtherApps]) }
+            
+            if authorized {
+                self.useAppleScriptImplementation()
+            } else {
+                self.useNonAppStoreCompliantImplementation()
+            }
+        }
+    }
+    
+    // MARK: Deprecated API
+    
+    /// Turns dark mode on/off/to the opposite.
+    private var source: String {
+        return """
+        tell application "System Events"
+            tell appearance preferences to set dark mode to \(rawValue)
+        end tell
+        """
+    }
+    
+    private func useAppleScriptImplementation() {
+        var errorInfo: NSDictionary? = nil
+        NSAppleScript(source: self.source)!
+            .executeAndReturnError(&errorInfo)
+        // Handle errors
+        if errorInfo != nil {
+            useNonAppStoreCompliantImplementation()
+        }
+    }
+    
+    // MARK: Private API
+    
+    private func useNonAppStoreCompliantImplementation() {
+        switch self {
+        case .toggleDarkMode:
+            SLSSetAppearanceThemeLegacy(!SLSGetAppearanceThemeLegacy())
+        case .enableDarkMode:
+            SLSSetAppearanceThemeLegacy(true)
+        case .disableDarkMode:
+            SLSSetAppearanceThemeLegacy(false)
         }
     }
 }
 
+// MARK: - Permission
+
 extension AppleScript {
-    public static func checkPermission(
-        onSuccess: @escaping CompletionHandler = { }
-    ) {
-        requestPermission { authorized in
-            if authorized { return onSuccess() }
-            showErrorThenRedirect()
-        }
-    }
-    
-    public static func showErrorThenRedirect() {
-        runModal(ofNSAlert: { alert in
-            alert.alertStyle = .critical
-            alert.messageText = NSLocalizedString(
-                "AppleScript.authorization.error",
-                value: "You didn't allow Dynamic Dark Mode to manage dark mode",
-                comment: ""
-            )
-            alert.informativeText = NSLocalizedString(
-                "AppleScript.authorization.instruction",
-                value: "We'll take you to System Preferences.",
-                comment: ""
-            )
-        }, then: { _ in
-            redirectToSystemPreferences()
-        })
-    }
+    public static let notAuthorized = NSLocalizedString(
+        "AppleScript.authorization.error",
+        value: "You didn't allow Dynamic Dark Mode to manage dark mode",
+        comment: ""
+    )
     
     public static func redirectToSystemPreferences() {
         openURL("x-apple.systempreferences:com.apple.preference.security?Privacy_Automation")
@@ -115,13 +106,7 @@ extension AppleScript {
                  procNotFound:
                 if retryOnInternalError {
                     requestPermission(retryOnInternalError: false, then: process)
-                } else {
-                    remindReportingBug(NSLocalizedString(
-                        "AppleScript.authorization.failed",
-                        value: "Something Went Wrong",
-                        comment: "Generic error happened"
-                    ), title: "OSStatus \(status)", issueID: 18)
-                }
+                } // else ignore
             default:
                 remindReportingBug("OSStatus \(status)")
             }

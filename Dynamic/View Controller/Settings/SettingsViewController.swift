@@ -13,6 +13,8 @@ extension NSStoryboard {
 }
 
 class SettingsViewController: NSViewController {
+    @objc dynamic private let hasZenithTypeSystem = Zenith.hasZenithTypeSystem
+    
     private static weak var window: NSWindow? = nil
     @objc public static func show() {
         if window == nil {

@@ -12,13 +12,6 @@ struct AnError: LocalizedError {
     let errorDescription: String?
 }
 
-public func remindReportingBug(info: NSDictionary?, title: String? = nil) {
-    guard let error = info else { return }
-    remindReportingBug(error.reduce("") {
-        "\($0)\($1.key): \($1.value)\n"
-    }, title: title)
-}
-
 public func remindReportingBug(_ text: String, title: String? = nil, issueID: Int? = nil) {
     let heading: String
     let notification: UserNotification.Identifier
@@ -41,7 +34,7 @@ public func remindReportingBug(_ text: String, title: String? = nil, issueID: In
     debugPrint(text)
     UserNotification.send(notification, title: heading, subtitle: text) { error in
         guard error != nil else { return }
-        runModal(ofNSAlert: { alert in
+        showAlert(withConfiguration: { alert in
             alert.alertStyle = .critical
             alert.messageText = heading
             alert.informativeText = text
@@ -49,8 +42,8 @@ public func remindReportingBug(_ text: String, title: String? = nil, issueID: In
     }
 }
 
-public func runModal(
-    ofNSAlert configure: @escaping Handler<NSAlert>,
+public func showAlert(
+    withConfiguration configure: @escaping Handler<NSAlert>,
     then process: @escaping Handler<NSApplication.ModalResponse> = { _ in }
 ) {
     DispatchQueue.main.async {

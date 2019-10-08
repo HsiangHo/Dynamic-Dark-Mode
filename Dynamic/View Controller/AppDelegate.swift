@@ -22,7 +22,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         UNUserNotificationCenter.current().delegate = self
         TouchBar.setup()
         Shortcut.startObserving()
-        
+        if #available(OSX 10.15, *), preferences.AppleInterfaceStyleSwitchesAutomatically {
+            Shortcut.stopObserving()
+            preferences.scheduleZenithType = .system
+        }
         if preferences.hasLaunchedBefore {
             Preferences.setupDefaultsForNewFeatures()
             Preferences.startObserving()
@@ -33,7 +36,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
     
     public func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        SettingsViewController.show()
+        reopen()
         return false
     }
     
@@ -42,5 +45,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         TouchBar.tearDown()
         Preferences.stopObserving()
         AppleInterfaceStyle.Coordinator.tearDown()
+    }
+}
+
+func reopen() {
+    if preferences.hasLaunchedBefore {
+        SettingsViewController.show()
+    } else {
+        Welcome.show()
     }
 }
